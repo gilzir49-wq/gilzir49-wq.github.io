@@ -149,6 +149,25 @@ html, body {
   margin-top: 3px;
 }
 
+/* ===== Insights ===== */
+.insight-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  cursor: default;
+}
+.insight-row:last-child { margin-bottom: 0; }
+.insight-neutral  { background: #F2F2F7; }
+.insight-good     { background: #34C75912; }
+.insight-warning  { background: #FF950015; }
+.insight-urgent   { background: #FF3B3012; }
+.insight-action   { background: #007AFF10; cursor: pointer; }
+.insight-icon     { font-size: 20px; flex-shrink: 0; }
+.insight-text     { flex: 1; font-size: 14px; line-height: 1.4; }
+
 /* ===== Stats grid ===== */
 .stats-grid {
   display: grid;

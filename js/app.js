@@ -85,19 +85,23 @@ function renderPage(page) {
   }
 }
 
-// ── HOME ───────────────────────────────────────────────
+// ── HOME — מח ראשי ─────────────────────────────────────
 function renderHome(el) {
   const tasks   = DB.get('tasks');
   const finance = DB.get('finance');
   const leads   = DB.get('leads');
+  const month   = new Date().toISOString().slice(0,7);
 
-  const openTasks   = tasks.filter(t => !t.done);
-  const todayTasks  = openTasks.slice(0, 5);
-  const openPayments = finance.filter(f => !f.isPaid && f.type === 'expense');
-  const openAmount  = openPayments.reduce((s,f) => s + f.amount, 0);
-  const newLeads    = leads.filter(l => l.status === 'new').length;
-  const ideas       = tasks.filter(t => t.category === 'idea' && !t.done).length;
-  const upcoming    = openTasks.filter(t => t.dueDate).sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  const openTasks    = tasks.filter(t => !t.done);
+  const urgentTasks  = openTasks.filter(t => t.priority === 'high');
+  const upcoming     = openTasks.filter(t => t.dueDate).sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  const newLeads     = leads.filter(l => l.status === 'new');
+  const monthFin     = finance.filter(f => f.date?.startsWith(month));
+  const monthExp     = monthFin.filter(f => f.type==='expense').reduce((s,f) => s+f.amount, 0);
+  const monthInc     = monthFin.filter(f => f.type==='income').reduce((s,f)  => s+f.amount, 0);
+  const balance      = monthInc - monthExp;
+
+  const insights = generateInsights({ tasks, finance, leads, month, openTasks, urgentTasks, upcoming, newLeads, monthExp, monthInc, balance, monthFin });
 
   el.innerHTML = `
     <div class="greeting">
@@ -105,31 +109,27 @@ function renderHome(el) {
       <div class="greeting-sub">${heDay()}</div>
     </div>
 
-    <div class="stats-grid">
-      <div class="stat-card" onclick="navigate('brain')">
-        <div class="stat-icon">🧠</div>
-        <div class="stat-value">${openTasks.length}</div>
-        <div class="stat-label">משימות פתוחות</div>
-      </div>
-      <div class="stat-card" onclick="navigate('finance')">
-        <div class="stat-icon">💳</div>
-        <div class="stat-value">₪${openAmount.toLocaleString('he-IL')}</div>
-        <div class="stat-label">לתשלום</div>
-      </div>
-      <div class="stat-card" onclick="navigate('crossfit')">
-        <div class="stat-icon">🏋️</div>
-        <div class="stat-value">${newLeads}</div>
-        <div class="stat-label">לידים חדשים</div>
-      </div>
-      <div class="stat-card" onclick="navigate('brain')">
-        <div class="stat-icon">💡</div>
-        <div class="stat-value">${ideas}</div>
-        <div class="stat-label">רעיונות</div>
-      </div>
+    <!-- AI Insights -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-label" style="margin-bottom:12px">💡 המח אומר</div>
+      ${insights.map(i => `
+        <div class="insight-row insight-${i.type}" onclick="${i.nav||''}">
+          <span class="insight-icon">${i.icon}</span>
+          <span class="insight-text">${i.text}</span>
+          ${i.nav ? '<span style="color:var(--text-3);font-size:16px">›</span>' : ''}
+        </div>
+      `).join('')}
     </div>
 
+    <!-- Finance snapshot by context -->
+    <div class="card" style="margin-bottom:12px" onclick="navigate('finance')">
+      <div class="card-label" style="margin-bottom:10px">💰 כספים החודש</div>
+      ${renderFinContextMini(monthFin)}
+    </div>
+
+    <!-- Upcoming reminders -->
     ${upcoming.length ? `
-    <div class="card">
+    <div class="card" style="margin-bottom:12px">
       <div class="card-label">🔔 תזכורות קרובות</div>
       ${upcoming.slice(0,3).map(t => `
         <div class="task-item ${t.done?'done':''}">
@@ -138,25 +138,90 @@ function renderHome(el) {
             <div class="task-text">${esc(t.text)}</div>
             <div class="task-meta">📅 ${fmtReminder(t)}</div>
           </div>
-          <button class="action-mini" onclick="event.stopPropagation();exportToCalendar('${t.id}')" title="ייצא ליומן">📅</button>
-          <button class="action-mini" onclick="event.stopPropagation();shareTask('${t.id}')" title="שתף">📤</button>
+          <button class="action-mini" onclick="event.stopPropagation();exportToCalendar('${t.id}')">📅</button>
         </div>
       `).join('')}
     </div>` : ''}
 
-    <div class="card">
-      <div class="card-label">משימות עדיפות</div>
-      ${todayTasks.length
-        ? todayTasks.map(t => taskItemHTML(t, true)).join('')
-        : '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">כל המשימות הושלמו!</div></div>'}
-    </div>
-
-    ${openPayments.length ? `
-    <div class="card">
-      <div class="card-label">⚠️ תשלומים פתוחים</div>
-      ${openPayments.slice(0,3).map(f => finItemHTML(f, false, true)).join('')}
-    </div>` : ''}
+    <!-- Open tasks -->
+    ${openTasks.length ? `
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-label">📋 משימות פתוחות (${openTasks.length})</div>
+      ${openTasks.slice(0,4).map(t => taskItemHTML(t, true)).join('')}
+    </div>` : `
+    <div class="card" style="margin-bottom:12px;text-align:center;padding:24px">
+      <div style="font-size:36px">✅</div>
+      <div style="color:var(--text-3);margin-top:6px">כל המשימות הושלמו!</div>
+    </div>`}
   `;
+}
+
+function generateInsights({ tasks, finance, leads, month, openTasks, urgentTasks, upcoming, newLeads, monthExp, monthInc, balance, monthFin }) {
+  const ins = [];
+  const now = new Date();
+
+  // Finance
+  if (monthExp > 0) {
+    const byCat = {};
+    monthFin.filter(f=>f.type==='expense').forEach(f => { byCat[f.category]=(byCat[f.category]||0)+f.amount; });
+    const top = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
+    const topCat = top ? finCatById(top[0]) : null;
+    ins.push({ icon:'💸', text:`הוצאת ₪${monthExp.toLocaleString('he-IL')} החודש${topCat?` — הכי הרבה על ${topCat.emoji} ${topCat.name}`:''}`, type:'neutral', nav:`navigate('finance')` });
+  }
+  if (monthInc > 0) {
+    ins.push({ icon: balance>=0?'📈':'📉', text:`מאזן חודשי: ${balance>=0?'+':''}₪${balance.toLocaleString('he-IL')}`, type: balance>=0?'good':'warning', nav:`navigate('finance')` });
+  }
+
+  // Tasks
+  if (urgentTasks.length > 0) {
+    ins.push({ icon:'🔴', text:`${urgentTasks.length} משימות דחופות ממתינות לטיפול`, type:'urgent', nav:`navigate('brain')` });
+  } else if (openTasks.length === 0) {
+    ins.push({ icon:'✅', text:'אין משימות פתוחות — כל הכבוד!', type:'good' });
+  }
+
+  // Due soon (3 days)
+  const dueSoon = upcoming.filter(t => { const d=(new Date(t.dueDate)-now)/(864e5); return d>=0&&d<=3; });
+  if (dueSoon.length) ins.push({ icon:'⏰', text:`${dueSoon.length} תזכורות בשלושת הימים הקרובים`, type:'warning', nav:`navigate('brain')` });
+
+  // Leads
+  if (newLeads.length > 0) {
+    ins.push({ icon:'👤', text:`${newLeads.length} לידים חדשים ב-BUX מחכים לטיפול`, type:'action', nav:`navigate('crossfit')` });
+  }
+
+  // If nothing to show
+  if (ins.length === 0) ins.push({ icon:'😊', text:'הכל נראה מצוין! הוסף נתונים כדי לקבל תובנות', type:'neutral' });
+
+  return ins;
+}
+
+// Finance context mini view for home screen
+const FIN_CONTEXTS = [
+  { id:'home_ctx',     label:'🏠 בית',       color:'#FF2D55', cats:['grocery','home','care','pets','holidays','superfarma','health','personal','superfarma'] },
+  { id:'personal_ctx', label:'🙋 אישי',      color:'#007AFF', cats:['food_out','coffee','clothes','fun','transport'] },
+  { id:'business_ctx', label:'💼 עסק',        color:'#5856D6', cats:['business'] },
+  { id:'crossfit_ctx', label:'🏋️ BUX',        color:'#FF9500', cats:['crossfit'] },
+];
+
+function renderFinContextMini(monthFin) {
+  const expenses = monthFin.filter(f => f.type === 'expense');
+  const totalExp = expenses.reduce((s,f) => s+f.amount, 0);
+  if (totalExp === 0) return `<div style="color:var(--text-3);font-size:13px;text-align:center;padding:8px">אין הוצאות החודש — לחץ להוסיף</div>`;
+
+  return FIN_CONTEXTS.map(ctx => {
+    const ctxTotal = expenses.filter(f => ctx.cats.includes(f.category)).reduce((s,f) => s+f.amount, 0);
+    if (ctxTotal === 0) return '';
+    const pct = totalExp > 0 ? (ctxTotal / totalExp) * 100 : 0;
+    return `
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="font-weight:500">${ctx.label}</span>
+          <span style="font-weight:700;color:${ctx.color}">₪${ctxTotal.toLocaleString('he-IL')}</span>
+        </div>
+        <div style="height:6px;background:#E5E5EA;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${Math.min(pct,100)}%;background:${ctx.color};border-radius:3px;transition:width .4s"></div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function getGreeting() {
@@ -273,42 +338,55 @@ function renderFinance(el) {
 }
 
 function renderFinSummary(el, data, period) {
-  const budgets = DB.getObj('fin_budgets', {});
+  const budgets  = DB.getObj('fin_budgets', {});
   const expenses = data.filter(f => f.type === 'expense');
   const incomes  = data.filter(f => f.type === 'income');
   const totalExp = expenses.reduce((s,f) => s+f.amount, 0);
   const totalInc = incomes.reduce((s,f)  => s+f.amount, 0);
   const balance  = totalInc - totalExp;
+  const circ     = 188.5;
 
-  // Group expenses by category
+  // Build by-category map
   const byCat = {};
-  expenses.forEach(f => {
-    const cat = f.category || 'personal';
-    byCat[cat] = (byCat[cat] || 0) + f.amount;
-  });
+  expenses.forEach(f => { const c = f.category||'personal'; byCat[c] = (byCat[c]||0)+f.amount; });
 
-  const circ = 188.5;
-  const catCircles = Object.entries(byCat).map(([catId, spent]) => {
-    const cat    = finCatById(catId);
-    const budget = budgets[catId] || 0;
-    const pct    = budget > 0 ? spent / budget : 0;
-    const color  = budget === 0 ? '#007AFF'
-                 : pct < 0.5   ? '#34C759'
-                 : pct < 0.8   ? '#FF9500' : '#FF3B30';
-    const dash   = budget > 0 ? Math.min(pct, 1) * circ : circ * 0.25;
+  // Context sections — each has its own donut grid
+  const ctxSections = FIN_CONTEXTS.map(ctx => {
+    const ctxCats  = Object.keys(byCat).filter(id => ctx.cats.includes(id));
+    if (!ctxCats.length) return '';
+    const ctxTotal = ctxCats.reduce((s,id) => s+(byCat[id]||0), 0);
+
+    const circles = ctxCats.map(catId => {
+      const spent  = byCat[catId];
+      const cat    = finCatById(catId);
+      const budget = budgets[catId] || 0;
+      const pct    = budget > 0 ? spent / budget : 0;
+      const color  = budget === 0 ? ctx.color
+                   : pct < 0.5   ? '#34C759'
+                   : pct < 0.8   ? '#FF9500' : '#FF3B30';
+      const dash   = budget > 0 ? Math.min(pct,1)*circ : circ*0.22;
+      return `
+        <div class="fin-cat-circle" onclick="openBudgetEdit('${catId}')">
+          <div class="fin-donut-wrap">
+            <svg width="72" height="72" viewBox="0 0 72 72">
+              <circle cx="36" cy="36" r="30" fill="none" stroke="#E5E5EA" stroke-width="7"/>
+              <circle cx="36" cy="36" r="30" fill="none" stroke="${color}" stroke-width="7"
+                stroke-dasharray="${dash} ${circ}" stroke-linecap="round" transform="rotate(-90 36 36)"/>
+            </svg>
+            <div class="fin-donut-center">${cat.emoji}</div>
+          </div>
+          <div class="fin-cat-name">${cat.name}</div>
+          <div class="fin-cat-spent" style="color:${color}">₪${spent.toLocaleString('he-IL')}${budget?`<br><small>/ ₪${budget.toLocaleString('he-IL')}</small>`:''}</div>
+        </div>`;
+    }).join('');
+
     return `
-      <div class="fin-cat-circle" onclick="openBudgetEdit('${catId}')">
-        <div class="fin-donut-wrap">
-          <svg width="72" height="72" viewBox="0 0 72 72">
-            <circle cx="36" cy="36" r="30" fill="none" stroke="#E5E5EA" stroke-width="7"/>
-            <circle cx="36" cy="36" r="30" fill="none" stroke="${color}" stroke-width="7"
-              stroke-dasharray="${dash} ${circ}" stroke-linecap="round"
-              transform="rotate(-90 36 36)"/>
-          </svg>
-          <div class="fin-donut-center">${cat.emoji}</div>
+      <div class="card" style="margin:0 16px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700">${ctx.label}</div>
+          <div style="font-size:18px;font-weight:800;color:${ctx.color}">₪${ctxTotal.toLocaleString('he-IL')}</div>
         </div>
-        <div class="fin-cat-name">${cat.name}</div>
-        <div class="fin-cat-spent" style="color:${color}">₪${spent.toLocaleString('he-IL')}${budget ? `<br><small>מתוך ₪${budget.toLocaleString('he-IL')}</small>` : ''}</div>
+        <div class="fin-circles-grid">${circles}</div>
       </div>`;
   }).join('');
 
@@ -322,23 +400,20 @@ function renderFinSummary(el, data, period) {
       </div>
     </div>
 
-    ${catCircles ? `
-    <div class="card" style="margin:0 16px 12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div class="card-label" style="margin:0">המטרות שלנו 🎯</div>
-        <button onclick="openBudgetManager()" style="background:none;border:none;font-size:13px;color:var(--c-finance);font-weight:600;cursor:pointer">✏️ ערוך תקציב</button>
-      </div>
-      <div class="fin-circles-grid">${catCircles}</div>
-    </div>` : `
+    <div style="padding:0 16px 4px;display:flex;justify-content:flex-end">
+      <button onclick="openBudgetManager()" style="background:none;border:none;font-size:13px;color:var(--c-finance);font-weight:600;cursor:pointer">🎯 ערוך תקציב</button>
+    </div>
+
+    ${ctxSections || `
     <div class="card" style="margin:0 16px 12px;text-align:center;padding:24px 20px">
       <div style="font-size:32px;margin-bottom:8px">💰</div>
-      <div style="color:var(--text-3);font-size:14px">הוסף הוצאות כדי לראות את הסיכום</div>
+      <div style="color:var(--text-3);font-size:14px">הוסף הוצאות כדי לראות סיכום לפי קטגוריה</div>
     </div>`}
 
-    ${expenses.length ? `
+    ${incomes.length ? `
     <div class="card" style="margin:0 16px 16px">
-      <div class="card-label">הוצאות אחרונות</div>
-      ${expenses.slice(0,5).map(f => finRowHTML(f, false)).join('')}
+      <div class="card-label">💵 הכנסות אחרונות</div>
+      ${incomes.slice(0,3).map(f => finRowHTML(f, false)).join('')}
     </div>` : ''}
   `;
 }
@@ -470,26 +545,28 @@ function renderCrossfit(el) {
   const trials  = leads.filter(l => l.status === 'trial').length;
 
   el.innerHTML = `
-    <div class="sec-header"><div class="sec-title">CrossFit BUX</div></div>
+    <div class="sec-header" style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sec-title">CrossFit BUX</div>
+      ${arbox.url ? `<button onclick="openArbox()" style="background:none;border:1.5px solid var(--sep);border-radius:20px;padding:5px 12px;font-size:13px;color:var(--text-2);cursor:pointer">🏅 Arbox</button>` : ''}
+    </div>
 
-    <!-- Arbox Card -->
-    <div class="card arbox-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div style="font-size:16px;font-weight:700">🏅 Arbox</div>
-        <button class="icon-btn" onclick="openArboxSettings()" title="הגדרות Arbox">⚙️</button>
+    <!-- Stats bar -->
+    <div style="display:flex;gap:10px;padding:0 16px 12px">
+      <div class="stat-card" style="flex:1;padding:14px 10px">
+        <div class="stat-icon">🟢</div>
+        <div class="stat-value">${members}</div>
+        <div class="stat-label">חברים</div>
       </div>
-      <div class="arbox-stats">
-        <div class="arbox-stat"><span>${members}</span><small>חברים פעילים</small></div>
-        <div class="arbox-stat"><span>${trials}</span><small>בניסיון</small></div>
-        <div class="arbox-stat"><span>${leads.filter(l=>l.status==='new').length}</span><small>לידים חדשים</small></div>
+      <div class="stat-card" style="flex:1;padding:14px 10px">
+        <div class="stat-icon">🟣</div>
+        <div class="stat-value">${trials}</div>
+        <div class="stat-label">ניסיון</div>
       </div>
-      ${arbox.url ? `
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="arbox-btn" onclick="openArbox()">📱 פתח Arbox</button>
-        <button class="arbox-btn secondary" onclick="shareArboxLink()">🔗 שתף קישור</button>
-      </div>` : `
-      <button class="arbox-btn" onclick="openArboxSettings()" style="margin-top:10px;width:100%">🔗 חבר Arbox</button>
-      `}
+      <div class="stat-card" style="flex:1;padding:14px 10px">
+        <div class="stat-icon">🔵</div>
+        <div class="stat-value">${leads.filter(l=>l.status==='new').length}</div>
+        <div class="stat-label">לידים</div>
+      </div>
     </div>
 
     ${tasks.length ? `
