@@ -232,34 +232,142 @@ function getGreeting() {
   return 'לילה טוב';
 }
 
-// ── BRAIN ──────────────────────────────────────────────
-const BRAIN_CATS = [
-  { key: 'business', label: '💼 עסק' },
-  { key: 'home',     label: '🏠 בית' },
-  { key: 'personal', label: '🙋 אישי' },
-  { key: 'idea',     label: '💡 רעיונות' },
+// ── BRAIN — Things 3 inspired ─────────────────────────
+const BRAIN_AREAS = [
+  { key: 'today',    label: 'היום',    emoji: '⭐', color: '#FF9500' },
+  { key: 'business', label: 'עסק',     emoji: '💼', color: '#5856D6' },
+  { key: 'home',     label: 'בית',     emoji: '🏠', color: '#FF2D55' },
+  { key: 'personal', label: 'אישי',    emoji: '👤', color: '#007AFF' },
+  { key: 'idea',     label: 'רעיונות', emoji: '💡', color: '#34C759' },
 ];
 
+const PRIORITY_CFG = {
+  high:   { color: '#FF3B30', label: 'דחוף',  dot: '🔴' },
+  medium: { color: '#FF9500', label: 'בינוני', dot: '🟡' },
+  low:    { color: '#34C759', label: 'נמוך',   dot: '🟢' },
+};
+
+function getTodayTasks(allTasks) {
+  const today = todayStr();
+  const seen  = new Set();
+  const result = [];
+  // Due today or overdue
+  allTasks.filter(t => !t.done && t.dueDate && t.dueDate <= today)
+    .forEach(t => { seen.add(t.id); result.push(t); });
+  // High priority (not already included)
+  allTasks.filter(t => !t.done && t.priority === 'high' && !seen.has(t.id))
+    .forEach(t => result.push(t));
+  return result.sort((a,b) => {
+    const pa = a.priority === 'high' ? 0 : 1;
+    const pb = b.priority === 'high' ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+    if (a.dueDate) return -1;
+    if (b.dueDate) return 1;
+    return 0;
+  });
+}
+
 function renderBrain(el) {
-  const cat   = State.brainCat;
-  const tasks = DB.get('tasks').filter(t => t.section === 'brain' && t.category === cat);
+  const area     = State.brainCat || 'today';
+  const allTasks = DB.get('tasks');
+
+  // Count per area
+  const counts = {};
+  BRAIN_AREAS.forEach(a => {
+    if (a.key === 'today') counts[a.key] = getTodayTasks(allTasks).length;
+    else counts[a.key] = allTasks.filter(t => !t.done && t.category === a.key).length;
+  });
+
+  const areaCfg = BRAIN_AREAS.find(a => a.key === area) || BRAIN_AREAS[0];
+
+  // Tasks to show
+  let tasks;
+  if (area === 'today') {
+    tasks = getTodayTasks(allTasks);
+  } else {
+    tasks = allTasks.filter(t => t.category === area)
+      .sort((a,b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        const po = {high:0, medium:1, low:2};
+        return (po[a.priority]??3) - (po[b.priority]??3);
+      });
+  }
+
+  const done   = tasks.filter(t => t.done);
+  const open   = tasks.filter(t => !t.done);
 
   el.innerHTML = `
-    <div class="sec-header"><div class="sec-title">מוח חיצוני</div></div>
-    <div class="cat-tabs">
-      ${BRAIN_CATS.map(c => `
-        <button class="cat-tab ${c.key === cat ? 'active' : ''}"
-          onclick="State.brainCat='${c.key}'; renderPage('brain')">${c.label}
-          <span class="cat-count">${DB.get('tasks').filter(t=>t.section==='brain'&&t.category===c.key&&!t.done).length||''}</span>
-        </button>
-      `).join('')}
+    <!-- Area tabs — horizontal scroll -->
+    <div class="brain-tabs-wrap">
+      <div class="brain-tabs">
+        ${BRAIN_AREAS.map(a => `
+          <button class="brain-tab ${a.key===area?'active':''}"
+            style="${a.key===area?`--tab-color:${a.color}`:'color:var(--text-3)'}"
+            onclick="State.brainCat='${a.key}'; renderPage('brain')">
+            <span class="brain-tab-emoji">${a.emoji}</span>
+            <span class="brain-tab-label">${a.label}</span>
+            ${counts[a.key] ? `<span class="brain-tab-count" style="${a.key===area?`background:${a.color}`:'background:var(--text-3)'}">${counts[a.key]}</span>` : ''}
+          </button>
+        `).join('')}
+      </div>
     </div>
-    <div class="card">
-      ${tasks.length
-        ? tasks.map(t => taskItemHTML(t, true)).join('')
-        : emptyHTML('📝', 'לחץ + להוסיף פריט')}
+
+    <!-- Area header -->
+    <div class="brain-area-header">
+      <span style="font-size:28px">${areaCfg.emoji}</span>
+      <div>
+        <div class="brain-area-title">${areaCfg.label}</div>
+        <div class="brain-area-sub">${open.length} פתוחות${done.length ? ` · ${done.length} הושלמו` : ''}</div>
+      </div>
     </div>
+
+    <!-- Open tasks -->
+    <div class="brain-list">
+      ${open.length
+        ? open.map(t => brainTaskHTML(t, areaCfg.color, area==='today')).join('')
+        : `<div class="brain-empty">
+             <div style="font-size:44px;margin-bottom:10px">${area==='today'?'✅':'📝'}</div>
+             <div style="font-weight:600;font-size:16px;margin-bottom:4px">${area==='today'?'אין משימות להיום':'האזור ריק'}</div>
+             <div style="font-size:14px;color:var(--text-3)">${area==='today'?'כל הכבוד, אתה מסודר!':'לחץ + כדי להוסיף'}</div>
+           </div>`}
+    </div>
+
+    <!-- Completed (collapsed) -->
+    ${done.length ? `
+    <details class="brain-done-section">
+      <summary>✅ הושלמו (${done.length})</summary>
+      <div class="brain-list" style="margin-top:8px;opacity:.65">
+        ${done.map(t => brainTaskHTML(t, areaCfg.color, false)).join('')}
+      </div>
+    </details>` : ''}
   `;
+}
+
+function brainTaskHTML(t, areaColor, showArea = false) {
+  const pri   = PRIORITY_CFG[t.priority];
+  const isOverdue = t.dueDate && t.dueDate < todayStr() && !t.done;
+  const areaInfo  = BRAIN_AREAS.find(a => a.key === t.category);
+  return `
+    <div class="brain-task ${t.done?'done':''}" onclick="toggleTask('${t.id}')">
+      ${pri ? `<div class="brain-priority-bar" style="background:${pri.color}"></div>` : '<div class="brain-priority-bar" style="background:transparent"></div>'}
+      <div class="brain-check ${t.done?'checked':''}" style="--chk:${areaColor}"
+        onclick="event.stopPropagation();toggleTask('${t.id}')">
+        ${t.done ? `<svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>` : ''}
+      </div>
+      <div class="brain-task-body">
+        <div class="brain-task-text">${esc(t.text)}</div>
+        <div class="brain-task-meta">
+          ${showArea && areaInfo ? `<span style="color:${areaInfo.color}">${areaInfo.emoji} ${areaInfo.label}</span>` : ''}
+          ${t.dueDate ? `<span style="color:${isOverdue?'#FF3B30':'var(--text-3)'}">📅 ${fmtReminder(t)}</span>` : ''}
+          ${pri && !t.done ? `<span style="color:${pri.color};font-size:11px">${pri.dot} ${pri.label}</span>` : ''}
+        </div>
+      </div>
+      <div class="brain-task-actions" onclick="event.stopPropagation()">
+        ${t.dueDate ? `<button class="action-mini" onclick="exportToCalendar('${t.id}')">📅</button>` : ''}
+        <button class="del-btn" onclick="deleteTask('${t.id}')">×</button>
+      </div>
+    </div>`;
 }
 
 // ── FINANCE ────────────────────────────────────────────
@@ -928,19 +1036,22 @@ function openAddForm() {
 
 // ── Add Task Form ──────────────────────────────────────
 function openAddTask() {
-  const defaultCat = State.page === 'brain' ? State.brainCat : 'business';
+  const cur = State.brainCat || 'business';
+  const defaultCat = (cur === 'today') ? 'business' : cur;
 
   openModal(`
-    <div class="modal-title">➕ משימה / רעיון חדש</div>
+    <div class="modal-title">➕ משימה חדשה</div>
     <div class="form-group">
-      <label class="form-label">טקסט</label>
-      <textarea class="form-textarea" id="new-task-text" placeholder="מה צריך לעשות?" rows="2"></textarea>
+      <label class="form-label">מה צריך לעשות?</label>
+      <textarea class="form-textarea" id="new-task-text" placeholder="תאר את המשימה..." rows="2"></textarea>
     </div>
     <div class="form-group">
-      <label class="form-label">קטגוריה</label>
-      <div class="chip-row" id="cat-chips">
-        ${[['business','💼 עסק'],['home','🏠 בית'],['personal','🙋 אישי'],['idea','💡 רעיון']].map(([k,l]) =>
-          `<button class="chip ${k===defaultCat?'sel':''}" onclick="selectChip('cat-chips',this)" data-val="${k}">${l}</button>`
+      <label class="form-label">אזור</label>
+      <div class="brain-area-pick-grid" id="cat-chips">
+        ${[['business','💼','עסק'],['home','🏠','בית'],['personal','👤','אישי'],['idea','💡','רעיון']].map(([k,e,l]) =>
+          `<button class="brain-area-pick ${k===defaultCat?'sel':''}" onclick="selectChip('cat-chips',this)" data-val="${k}">
+            <span style="font-size:22px">${e}</span><span>${l}</span>
+          </button>`
         ).join('')}
       </div>
     </div>
