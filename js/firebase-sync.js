@@ -97,7 +97,7 @@ DB.set = function(key, val) {
 };
 
 // ── Real-time listeners ────────────────────────────────
-const SYNC_COLS = ['tasks', 'finance', 'leads'];
+const SYNC_COLS = ['tasks', 'finance', 'leads', 'calm_log'];
 
 function startListeners() {
   // Unsubscribe old listeners

@@ -110,6 +110,16 @@ function renderHome(el) {
       <div class="greeting-sub">${heDay()}</div>
     </div>
 
+    <!-- Calm button -->
+    <button class="calm-home-btn" onclick="openCalmTool()">
+      <span style="font-size:28px">🌊</span>
+      <div>
+        <div style="font-size:15px;font-weight:700">הרגעה מהירה</div>
+        <div style="font-size:12px;opacity:.75">נשימות · עיגון · שחרור</div>
+      </div>
+      <span style="font-size:20px;opacity:.6">›</span>
+    </button>
+
     <!-- AI Insights -->
     <div class="card" style="margin-bottom:12px">
       <div class="card-label" style="margin-bottom:12px">💡 המח אומר</div>
@@ -240,6 +250,307 @@ function getGreeting() {
   if (h < 17) return 'צהריים טובים';
   if (h < 21) return 'ערב טוב';
   return 'לילה טוב';
+}
+
+// ── CALM TOOL — כלי הרגעה ─────────────────────────────
+function openCalmTool() {
+  openModal(`
+    <div class="modal-title">🌊 הרגעה מהירה</div>
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:14px;color:var(--text-3);margin-bottom:14px">כמה עז התחושה עכשיו?</div>
+      <div class="calm-intensity-row" id="int-row">
+        ${[1,2,3,4,5,6,7,8,9,10].map(n => {
+          const color = n<=3?'#34C759':n<=6?'#FF9500':'#FF3B30';
+          return `<button class="calm-int-btn" data-val="${n}" style="--ic:${color}"
+            onclick="selectIntensity(${n})">${n}</button>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-top:4px;padding:0 4px">
+        <span>רגוע</span><span>בינוני</span><span>עצים</span>
+      </div>
+    </div>
+    <div id="calm-tool-area"></div>
+  `);
+}
+
+function selectIntensity(n) {
+  document.querySelectorAll('.calm-int-btn').forEach(b =>
+    b.classList.toggle('sel', parseInt(b.dataset.val) === n));
+  const area = document.getElementById('calm-tool-area');
+  if (!area) return;
+
+  let tools = '';
+  if (n >= 7) {
+    tools = `
+      <div style="text-align:center;font-size:13px;color:var(--text-3);margin-bottom:12px">כעס עצים — בוא ננשום ביחד</div>
+      <div class="calm-tools-grid">
+        ${calmCard('🫁','נשימת קופסה','4·4·4·4',"startBreathing('box')")}
+        ${calmCard('😮‍💨','4-7-8','מרגיע עצבים',"startBreathing('478')")}
+        ${calmCard('🌍','5-4-3-2-1','עיגון חושי','startGrounding()')}
+        ${calmCard('🚶','הרחק את עצמך','2 דקות לבד','quickTip("הרחק")')}
+      </div>`;
+  } else if (n >= 4) {
+    tools = `
+      <div style="text-align:center;font-size:13px;color:var(--text-3);margin-bottom:12px">בוא נחזיר אותך לרגע הנוכחי</div>
+      <div class="calm-tools-grid">
+        ${calmCard('🌍','5-4-3-2-1','עיגון חושי','startGrounding()')}
+        ${calmCard('🫁','נשימה','4-4-4-4',"startBreathing('box')")}
+        ${calmCard('💧','שתה מים','פעולה פשוטה','quickTip("מים")')}
+        ${calmCard('✍️','שחרר בכתיבה','יומן רגשי','openCalmJournal()')}
+      </div>`;
+  } else {
+    tools = `
+      <div style="text-align:center;font-size:13px;color:var(--text-3);margin-bottom:12px">כעס קל — בוא נבין מה קרה</div>
+      <div class="calm-tools-grid">
+        ${calmCard('✍️','שחרר בכתיבה','יומן רגשי','openCalmJournal()')}
+        ${calmCard('🌍','עיגון','5-4-3-2-1','startGrounding()')}
+        ${calmCard('🫁','נשימה','הרגע','startBreathing(\'box\')')}
+        ${calmCard('📊','דפוסים','היסטוריה','openCalmHistory()')}
+      </div>`;
+  }
+
+  area.innerHTML = tools + `
+    <button class="btn-secondary" style="margin-top:14px" onclick="openCalmJournal(${n})">
+      ✍️ תעד מה קרה (${n}/10)
+    </button>`;
+}
+
+function calmCard(emoji, name, desc, action) {
+  return `
+    <button class="calm-tool-card" onclick="${action}">
+      <span style="font-size:32px">${emoji}</span>
+      <span class="calm-tool-name">${name}</span>
+      <span class="calm-tool-desc">${desc}</span>
+    </button>`;
+}
+
+function quickTip(type) {
+  const tips = {
+    'הרחק': { icon:'🚶', title:'הרחק את עצמך', body:'לך לחדר אחר, צא החוצה לכמה דקות.\nמרחק פיזי = מרחק רגשי.\nחזור כשאתה מוכן.' },
+    'מים':  { icon:'💧', title:'שתה מים', body:'קום, שפוך כוס מים קרים.\nשתה לאט — זה מפעיל את הפאראסימפטתי\nומוריד את רמת הקורטיזול.' },
+  };
+  const t = tips[type];
+  if (!t) return;
+  document.getElementById('modal-content').innerHTML = `
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:56px;margin-bottom:12px">${t.icon}</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:12px">${t.title}</div>
+      <div style="font-size:15px;color:var(--text-2);line-height:1.8;white-space:pre-line;margin-bottom:24px">${t.body}</div>
+      <button class="btn-primary" onclick="openCalmJournal()">✍️ תעד אחר כך</button>
+      <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">סגור</button>
+    </div>`;
+}
+
+// ── Breathing Exercise ─────────────────────────────────
+let _breathTimer = null;
+
+const BREATH_PATTERNS = {
+  box:  { name:'נשימת קופסה', color:'#007AFF', rounds:4,
+          phases:[['שאיפה','inhale',4],['עצירה','hold',4],['נשיפה','exhale',4],['עצירה','hold',4]] },
+  '478':{ name:'4-7-8',       color:'#5856D6', rounds:3,
+          phases:[['שאיפה','inhale',4],['עצירה','hold',7],['נשיפה','exhale',8]] },
+};
+
+function startBreathing(type) {
+  const p = BREATH_PATTERNS[type];
+  clearTimeout(_breathTimer);
+  openModal(`
+    <div style="text-align:center">
+      <div class="modal-title">${p.name}</div>
+      <div class="calm-breath-wrap">
+        <div class="calm-breath-circle" id="breath-circle" style="--bc:${p.color}"></div>
+        <div class="calm-breath-center">
+          <div id="breath-phase" style="font-size:16px;font-weight:700;color:${p.color}">מוכן?</div>
+          <div id="breath-count" style="font-size:44px;font-weight:900;color:${p.color}">3</div>
+        </div>
+      </div>
+      <div id="breath-round" style="font-size:13px;color:var(--text-3);margin-top:8px">סיבוב 0 / ${p.rounds}</div>
+      <button class="btn-secondary" style="margin-top:16px" onclick="stopBreathing()">עצור</button>
+    </div>
+  `);
+  runBreathCycle(p, 0, 0, 0, true);
+}
+
+function runBreathCycle(p, round, phaseIdx, count, countdown) {
+  if (!document.getElementById('breath-circle')) return;
+  const circle   = document.getElementById('breath-circle');
+  const phaseEl  = document.getElementById('breath-phase');
+  const countEl  = document.getElementById('breath-count');
+  const roundEl  = document.getElementById('breath-round');
+
+  if (countdown > 0) {
+    countEl.textContent = countdown;
+    _breathTimer = setTimeout(() => runBreathCycle(p, round, phaseIdx, count, countdown - 1), 1000);
+    return;
+  }
+
+  const [phaseName, phaseType, duration] = p.phases[phaseIdx];
+  if (count === 0) {
+    phaseEl.textContent = phaseName;
+    if (phaseType === 'inhale') {
+      circle.style.transition = `transform ${duration}s ease-in-out`;
+      circle.style.transform  = 'scale(1.45)';
+    } else if (phaseType === 'exhale') {
+      circle.style.transition = `transform ${duration}s ease-in-out`;
+      circle.style.transform  = 'scale(0.75)';
+    }
+    roundEl.textContent = `סיבוב ${round + 1} / ${p.rounds}`;
+  }
+  countEl.textContent = duration - count;
+
+  let nextCount = count + 1;
+  let nextPhase = phaseIdx;
+  let nextRound = round;
+
+  if (nextCount >= duration) {
+    nextCount = 0;
+    nextPhase++;
+    if (nextPhase >= p.phases.length) {
+      nextPhase = 0;
+      nextRound++;
+      if (nextRound >= p.rounds) { stopBreathing(); return; }
+    }
+  }
+  _breathTimer = setTimeout(() => runBreathCycle(p, nextRound, nextPhase, nextCount, 0), 1000);
+}
+
+function stopBreathing() {
+  clearTimeout(_breathTimer);
+  document.getElementById('modal-content').innerHTML = `
+    <div style="text-align:center;padding:24px 0">
+      <div style="font-size:64px;margin-bottom:16px">😌</div>
+      <div style="font-size:22px;font-weight:700;margin-bottom:8px">מעולה!</div>
+      <div style="font-size:14px;color:var(--text-3);margin-bottom:24px">איך אתה מרגיש עכשיו?</div>
+      <button class="btn-primary" onclick="openCalmJournal()">✍️ תעד את החוויה</button>
+      <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">סגור</button>
+    </div>`;
+}
+
+// ── Grounding 5-4-3-2-1 ────────────────────────────────
+const GROUND_STEPS = [
+  { n:5, emoji:'👁️', sense:'ראייה',  instruction:'מצא 5 דברים שאתה רואה עכשיו' },
+  { n:4, emoji:'🤚', sense:'מגע',    instruction:'מצא 4 דברים שאתה יכול לגעת בהם' },
+  { n:3, emoji:'👂', sense:'שמיעה',  instruction:'הקשב ל-3 צלילים שאתה שומע' },
+  { n:2, emoji:'👃', sense:'ריח',    instruction:'שים לב ל-2 ריחות סביבך' },
+  { n:1, emoji:'👅', sense:'טעם',    instruction:'הרגש טעם אחד בפה שלך' },
+];
+
+function startGrounding() { showGroundStep(0); }
+
+function showGroundStep(idx) {
+  if (idx >= GROUND_STEPS.length) {
+    document.getElementById('modal-content').innerHTML = `
+      <div style="text-align:center;padding:24px 0">
+        <div style="font-size:64px;margin-bottom:16px">🌱</div>
+        <div style="font-size:22px;font-weight:700;margin-bottom:8px">עשית את זה!</div>
+        <div style="font-size:14px;color:var(--text-3);margin-bottom:24px">אתה מחובר לרגע הנוכחי</div>
+        <button class="btn-primary" onclick="openCalmJournal()">✍️ תעד את החוויה</button>
+        <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">סיום</button>
+      </div>`;
+    return;
+  }
+  const s = GROUND_STEPS[idx];
+  document.getElementById('modal-content').innerHTML = `
+    <div style="text-align:center">
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:6px">${idx+1} / ${GROUND_STEPS.length}</div>
+      <div style="font-size:56px;margin-bottom:4px">${s.emoji}</div>
+      <div style="font-size:56px;font-weight:900;color:var(--c-brain);line-height:1;margin-bottom:8px">${s.n}</div>
+      <div style="font-size:17px;font-weight:600;margin-bottom:20px">${s.instruction}</div>
+      <div class="calm-ground-checks" id="ground-checks">
+        ${Array.from({length:s.n},(_,i) =>
+          `<button class="calm-ground-check" onclick="checkGround(this,${s.n})">${s.emoji}</button>`
+        ).join('')}
+      </div>
+      <button class="btn-primary" id="ground-next" style="margin-top:20px;display:none"
+        onclick="showGroundStep(${idx+1})">${idx+1<GROUND_STEPS.length?'הבא ›':'סיום ✅'}</button>
+      <button class="btn-secondary" style="margin-top:8px" onclick="showGroundStep(${idx+1})">דלג</button>
+    </div>`;
+}
+
+function checkGround(btn, total) {
+  btn.classList.add('done');
+  btn.disabled = true;
+  const done = document.querySelectorAll('.calm-ground-check.done').length;
+  if (done >= total) {
+    const next = document.getElementById('ground-next');
+    if (next) next.style.display = 'block';
+  }
+}
+
+// ── Calm Journal ───────────────────────────────────────
+function openCalmJournal(intensity) {
+  openModal(`
+    <div class="modal-title">✍️ מה קרה?</div>
+    <div class="form-group">
+      <label class="form-label">מה גרם לתחושה?</label>
+      <textarea class="form-textarea" id="calm-trigger" placeholder="תאר בקצרה מה קרה..." rows="2"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">איפה הרגשת את זה בגוף?</label>
+      <div class="chip-row" id="body-chips">
+        ${['❤️ לב','🤰 בטן','🧠 ראש','💪 שרירים','😮‍💨 נשימה','🔥 חום'].map(b =>
+          `<button class="chip" onclick="this.classList.toggle('sel')" data-val="${b}">${b}</button>`
+        ).join('')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">מה עשית?</label>
+      <div class="chip-row" id="action-chips">
+        ${['נשמתי','התרחקתי','דיברתי','שתקתי','פרצתי','ספרתי לאחור'].map(a =>
+          `<button class="chip" onclick="this.classList.toggle('sel')" data-val="${a}">${a}</button>`
+        ).join('')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">לפעם הבאה — מה יעזור יותר?</label>
+      <textarea class="form-textarea" id="calm-lesson" placeholder="תובנה קצרה..." rows="2"></textarea>
+    </div>
+    <button class="btn-primary" style="--btn-color:#5856D6" onclick="saveCalmEntry(${intensity||5})">💾 שמור</button>
+  `);
+}
+
+function saveCalmEntry(intensity) {
+  const trigger = document.getElementById('calm-trigger')?.value.trim() || '';
+  const lesson  = document.getElementById('calm-lesson')?.value.trim()  || '';
+  const body    = [...document.querySelectorAll('#body-chips .sel')].map(b => b.dataset.val);
+  const actions = [...document.querySelectorAll('#action-chips .sel')].map(b => b.dataset.val);
+  DB.add('calm_log', { intensity, trigger, lesson, body, actions, date: todayStr() });
+  closeModal();
+  showToast('✅ נרשם — כל הכבוד על העבודה הפנימית 💪');
+}
+
+function openCalmHistory() {
+  const log = DB.get('calm_log');
+  if (!log.length) {
+    openModal(`<div class="modal-title">📊 היסטוריה</div>
+      <div style="text-align:center;padding:30px;color:var(--text-3)">אין רשומות עדיין</div>`);
+    return;
+  }
+  const avg = (log.reduce((s,e) => s+(e.intensity||0),0)/log.length).toFixed(1);
+  openModal(`
+    <div class="modal-title">📊 דפוסי כעס</div>
+    <div style="display:flex;gap:12px;margin-bottom:20px">
+      <div class="stat-card" style="flex:1;text-align:center;padding:12px">
+        <div class="stat-value">${log.length}</div>
+        <div class="stat-label">פעמים נרשמו</div>
+      </div>
+      <div class="stat-card" style="flex:1;text-align:center;padding:12px">
+        <div class="stat-value">${avg}</div>
+        <div class="stat-label">עוצמה ממוצעת</div>
+      </div>
+    </div>
+    <div style="max-height:55vh;overflow-y:auto">
+      ${log.slice(0,20).map(e => `
+        <div style="padding:12px;border-bottom:1px solid var(--sep)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:13px;color:var(--text-3)">${e.date||''}</span>
+            <span style="font-size:13px;font-weight:700;color:${(e.intensity||0)>=7?'#FF3B30':(e.intensity||0)>=4?'#FF9500':'#34C759'}">${e.intensity||'?'}/10</span>
+          </div>
+          ${e.trigger ? `<div style="font-size:14px;margin-bottom:4px">${esc(e.trigger)}</div>` : ''}
+          ${e.lesson  ? `<div style="font-size:12px;color:var(--c-brain)">💡 ${esc(e.lesson)}</div>` : ''}
+        </div>`).join('')}
+    </div>
+  `);
 }
 
 // ── Calendar helpers ───────────────────────────────────

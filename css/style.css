@@ -1243,6 +1243,126 @@ html, body {
   color: var(--text-3);
 }
 
+/* ===== Calm Tool ===== */
+.calm-home-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, #5856D6 0%, #007AFF 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  cursor: pointer;
+  text-align: right;
+  box-shadow: 0 4px 16px rgba(88,86,214,0.35);
+  transition: transform .15s, box-shadow .15s;
+  font-family: inherit;
+}
+.calm-home-btn:active { transform: scale(.97); box-shadow: 0 2px 8px rgba(88,86,214,.25); }
+.calm-home-btn > div { flex: 1; }
+
+.calm-intensity-row {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+.calm-int-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--sep);
+  background: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-2);
+  transition: all .15s;
+}
+.calm-int-btn.sel {
+  background: var(--ic, #007AFF);
+  border-color: var(--ic, #007AFF);
+  color: #fff;
+  transform: scale(1.15);
+}
+
+.calm-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.calm-tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px 12px;
+  background: var(--bg);
+  border: 1.5px solid var(--sep);
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.calm-tool-card:active { transform: scale(.96); background: var(--sep); }
+.calm-tool-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.calm-tool-desc { font-size: 11px; color: var(--text-3); }
+
+/* Breathing circle */
+.calm-breath-wrap {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto 8px;
+}
+.calm-breath-circle {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bc, #007AFF) 15%, transparent);
+  border: 3px solid var(--bc, #007AFF);
+  transform: scale(0.85);
+  transition: transform 4s ease-in-out;
+}
+.calm-breath-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+/* Grounding checks */
+.calm-ground-checks {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+.calm-ground-check {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--sep);
+  background: var(--bg);
+  font-size: 22px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.calm-ground-check.done {
+  background: #34C759;
+  border-color: #34C759;
+  font-size: 20px;
+}
+.calm-ground-check.done::after { content: '✓'; color: white; font-size: 22px; font-weight: 700; }
+.calm-ground-check.done { font-size: 0; }
+
 /* ===== Arbox Card ===== */
 .arbox-card { border: 1.5px solid rgba(255,149,0,0.2); }
 
