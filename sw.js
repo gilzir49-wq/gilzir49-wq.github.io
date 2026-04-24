@@ -1,4 +1,4 @@
-const CACHE = 'command-center-v13';
+const CACHE = 'command-center-v14';
 const ASSETS = [
   './',
   './index.html',
@@ -14,8 +14,8 @@ const ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(ASSETS))
-    // לא קוראים ל-skipWaiting כאן — נחכה לאישור המשתמש
   );
+  self.skipWaiting(); // עדכון אוטומטי — בלי לחכות לאישור
 });
 
 self.addEventListener('activate', e => {
