@@ -1,5 +1,8 @@
 /* ===== מרכז פיקוד — App Logic ===== */
 
+// ── Google Calendar cache (loaded from Firestore on init) ──
+let _gcalEvents = [];
+
 // ── State ──────────────────────────────────────────────
 const State = {
   page: 'home',
@@ -158,7 +161,10 @@ function renderHome(el) {
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div class="card-label" style="margin-bottom:0">📅 יומן — שבוע קרוב</div>
-        <button onclick="openCalendar()" style="background:none;border:none;font-size:13px;color:var(--c-home);font-weight:600;cursor:pointer;padding:0">פתח יומן ›</button>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button id="gcal-refresh-btn" onclick="refreshGcal()" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0;line-height:1;opacity:0.7" title="רענן יומן">🔄</button>
+          <button onclick="openCalendar()" style="background:none;border:none;font-size:13px;color:var(--c-home);font-weight:600;cursor:pointer;padding:0">פתח יומן ›</button>
+        </div>
       </div>
       ${renderUpcomingCalendar(tasks)}
     </div>
@@ -554,6 +560,21 @@ function openCalmHistory() {
 }
 
 // ── Calendar helpers ───────────────────────────────────
+function refreshGcal() {
+  const btn = document.getElementById('gcal-refresh-btn');
+  if (btn) {
+    btn.style.animation = 'spin 0.8s linear infinite';
+    btn.style.display = 'inline-block';
+  }
+  if (typeof loadGcalEvents === 'function') {
+    loadGcalEvents(evts => {
+      _gcalEvents = evts || [];
+      renderPage('home');
+      showToast('📅 יומן עודכן!');
+    });
+  }
+}
+
 function openCalendar() {
   const ua = navigator.userAgent;
   if (/iPhone|iPad/.test(ua)) {
@@ -571,44 +592,83 @@ function renderUpcomingCalendar(tasks) {
   futureDate.setDate(futureDate.getDate() + 14);
   const futureStr = futureDate.toISOString().split('T')[0];
 
-  const upcoming = tasks
+  // ── Task-based items ──────────────────────────────────
+  const taskItems = tasks
     .filter(t => !t.done && t.dueDate && t.dueDate >= today && t.dueDate <= futureStr)
-    .sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+    .map(t => ({
+      date: t.dueDate,
+      time: t.reminderTime || '',
+      title: t.text,
+      type: 'task',
+      priority: t.priority,
+      category: t.category,
+    }));
 
-  if (!upcoming.length) {
+  // ── Google Calendar items ─────────────────────────────
+  const gcalItems = _gcalEvents
+    .filter(e => e.date && e.date >= today && e.date <= futureStr)
+    .map(e => ({
+      date: e.date,
+      time: e.time || '',
+      endTime: e.endTime || '',
+      title: e.title,
+      type: 'gcal',
+    }));
+
+  // ── Merge & sort by date then time ───────────────────
+  const all = [...taskItems, ...gcalItems]
+    .sort((a, b) => {
+      const dateCmp = a.date.localeCompare(b.date);
+      if (dateCmp !== 0) return dateCmp;
+      return (a.time || '99:99').localeCompare(b.time || '99:99');
+    });
+
+  if (!all.length) {
     return `<div style="font-size:13px;color:var(--text-3);text-align:center;padding:8px 0">
-      אין תזכורות בשבועיים הקרובים
-      <div style="margin-top:6px;font-size:12px">הוסף תאריך יעד למשימה כדי לראות אותה כאן</div>
+      אין אירועים בשבועיים הקרובים
+      <div style="margin-top:6px;font-size:12px">אירועי יומן גוגל יופיעו כאן אוטומטית</div>
     </div>`;
   }
 
   // Group by date
   const byDate = {};
-  upcoming.forEach(t => {
-    if (!byDate[t.dueDate]) byDate[t.dueDate] = [];
-    byDate[t.dueDate].push(t);
+  all.forEach(item => {
+    if (!byDate[item.date]) byDate[item.date] = [];
+    byDate[item.date].push(item);
   });
+
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   return Object.entries(byDate).map(([date, items]) => {
     const d = new Date(date + 'T00:00:00');
     const isToday    = date === today;
-    const tomorrow   = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-    const isTomorrow = date === tomorrow.toISOString().split('T')[0];
+    const isTomorrow = date === tomorrowStr;
     const label = isToday ? '⭐ היום' : isTomorrow ? '📌 מחר' : `${DAYS[d.getDay()]}, ${d.getDate()} ב${MONTHS[d.getMonth()]}`;
     const labelColor = isToday ? 'var(--c-home)' : isTomorrow ? '#FF9500' : 'var(--text-3)';
     return `
       <div style="margin-bottom:10px">
         <div style="font-size:11px;font-weight:700;color:${labelColor};margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">${label}</div>
-        ${items.map(t => {
-          const pri = PRIORITY_CFG[t.priority];
-          const area = BRAIN_AREAS.find(a => a.key === t.category);
-          return `
-          <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--sep)">
-            <div style="width:8px;height:8px;border-radius:50%;background:${pri?.color||'var(--text-3)'};flex-shrink:0"></div>
-            <div style="font-size:13px;flex:1;line-height:1.3">${esc(t.text)}</div>
-            ${t.reminderTime ? `<span style="font-size:11px;color:var(--text-3)">${t.reminderTime}</span>` : ''}
-            ${area ? `<span style="font-size:11px;color:${area.color}">${area.emoji}</span>` : ''}
-          </div>`;
+        ${items.map(item => {
+          if (item.type === 'gcal') {
+            const timeStr = item.time ? `${item.time}${item.endTime ? '–'+item.endTime : ''}` : '';
+            return `
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--sep)">
+              <span style="font-size:13px;flex-shrink:0">📅</span>
+              <div style="font-size:13px;flex:1;line-height:1.3">${esc(item.title)}</div>
+              ${timeStr ? `<span style="font-size:11px;color:var(--text-3);direction:ltr">${timeStr}</span>` : ''}
+            </div>`;
+          } else {
+            const pri = PRIORITY_CFG[item.priority];
+            const area = BRAIN_AREAS.find(a => a.key === item.category);
+            return `
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--sep)">
+              <div style="width:8px;height:8px;border-radius:50%;background:${pri?.color||'var(--text-3)'};flex-shrink:0"></div>
+              <div style="font-size:13px;flex:1;line-height:1.3">${esc(item.title)}</div>
+              ${item.time ? `<span style="font-size:11px;color:var(--text-3)">${item.time}</span>` : ''}
+              ${area ? `<span style="font-size:11px;color:${area.color}">${area.emoji}</span>` : ''}
+            </div>`;
+          }
         }).join('')}
       </div>`;
   }).join('');
@@ -2023,6 +2083,14 @@ function init() {
         if (!refreshing) { refreshing = true; location.reload(); }
       });
     }).catch(() => {});
+  }
+
+  // Load Google Calendar events and re-render home if on home page
+  if (typeof loadGcalEvents === 'function') {
+    loadGcalEvents(evts => {
+      _gcalEvents = evts || [];
+      if (State.page === 'home') renderPage('home');
+    });
   }
 
   navigate('home');
